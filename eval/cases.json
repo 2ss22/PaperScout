@@ -1,0 +1,5 @@
+[
+  {"id": "latent_reasoning", "question": "连续潜在推理有哪些方法？现有证据能否支持它改善组合泛化？"},
+  {"id": "multimodal_reasoning", "question": "多模态大模型如何使用视觉信息进行多步推理？有哪些评测与限制？"},
+  {"id": "inference_compute", "question": "推理时增加计算量与训练连续思维各有什么收益？哪些结果可以直接比较？"}
+]

@@ -1,0 +1,26 @@
+# Environments
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Secrets
+.env
+.streamlit/secrets.toml
+
+# Generated reports
+reports/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# PaperScout cached papers and local evaluation runs
+.cache/
+eval/runs/

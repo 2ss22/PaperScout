@@ -1,0 +1,10 @@
+streamlit>=1.40,<2
+openai>=1.50,<3
+httpx>=0.27,<1
+pydantic>=2.8,<3
+pypdf>=6,<7
+rank-bm25>=0.2.2,<0.3
+python-dotenv>=1.0,<2
+pytest>=8.0,<10
+PyMuPDF>=1.26,<2
+beautifulsoup4>=4.12,<5
