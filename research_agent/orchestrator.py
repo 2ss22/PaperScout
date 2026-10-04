@@ -47,7 +47,7 @@ def add_extraction(run: RunResult, extraction: Extraction,
 
 
 def create_claims(draft: Draft) -> list[Claim]:
-    return [Claim(id=f"C{i:03d}", text=c.text, kind=c.kind,
+    return [Claim(id=f"C{i:03d}", text=c.text, kind=c.kind, focus=c.focus, priority=c.priority, scope=c.scope,
                   evidence_ids=list(dict.fromkeys(c.evidence_ids)))
             for i, c in enumerate(draft.claims, 1)]
 
@@ -60,6 +60,7 @@ def review_claims(claims: list[Claim], evidence: list[Evidence], chunks: list[Te
     for verdict in review.verdicts:
         verdicts.setdefault(verdict.claim_id, []).append(verdict)
     for claim in claims:
+        claim.evidence_assessments = []
         reason = ""
         if not claim.evidence_ids or any(e not in evidence_by_id for e in claim.evidence_ids):
             reason = "引用缺失或包含不存在的证据 ID。"
@@ -81,10 +82,16 @@ def review_claims(claims: list[Claim], evidence: list[Evidence], chunks: list[Te
             claim.status, claim.reason = "insufficient", "审阅结果缺失或重复，未能完成核验。"
         else:
             claim.status, claim.reason = matches[0].status, matches[0].reason
+            assessments = matches[0].evidence_assessments
+            # Relations may only describe this claim's actual evidence; reject
+            # duplicate/conflicting annotations instead of choosing one silently.
+            claim.evidence_assessments = [a for a in assessments
+                if a.evidence_id in claim.evidence_ids and a.evidence_id in evidence_by_id
+                and sum(b.evidence_id == a.evidence_id for b in assessments) == 1]
     return claims
 
 
-def run_research(question: str, *, client: ArxivClient | None = None, visual_pages: int | None = None) -> Iterator[Event]:
+def run_research_legacy(question: str, *, client: ArxivClient | None = None, visual_pages: int | None = None) -> Iterator[Event]:
     started = time.monotonic()
     run = RunResult(run_id=uuid4().hex, created_at=datetime.now(timezone.utc).isoformat(),
                     question=question.strip(), provider=settings.provider, model=settings.model)
@@ -225,3 +232,21 @@ def run_research(question: str, *, client: ArxivClient | None = None, visual_pag
     run.report = render_report(run)
     yield event("stop", run.stop_reason)
     yield Event(stage="done", message="报告与运行记录已生成。", data=run)
+
+
+def run_research(question: str = '', *, client: ArxivClient | None = None,
+                 visual_pages: int | None = None, run_id: str | None = None,
+                 resume: bool = False, approve_papers: bool = False,
+                 selection: list[str] | None = None, checkpoint_path=None,
+                 engine: str = 'langgraph') -> Iterator[Event]:
+    if engine == 'legacy':
+        if resume:
+            raise ValueError('旧版编排不支持检查点恢复。')
+        yield from run_research_legacy(question, client=client, visual_pages=visual_pages)
+        return
+    if engine != 'langgraph':
+        raise ValueError('未知编排引擎。')
+    from .graph import run_graph
+    yield from run_graph(question, client=client, visual_pages=visual_pages, run_id=run_id,
+                         resume=resume, approve_papers=approve_papers, selection=selection,
+                         checkpoint_path=checkpoint_path)

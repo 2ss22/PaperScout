@@ -138,3 +138,49 @@ def chat_json(messages: list[dict[str, Any]], *, temperature: float = 0.2, visio
             except json.JSONDecodeError as exc:
                 raise LLMError(f"模型 JSON 无效：第 {exc.lineno} 行第 {exc.colno} 列，{exc.msg}。") from exc
         raise LLMError("模型未返回有效 JSON 对象（可能为空、截断或格式不符）。")
+
+
+def chat_tools(messages: list[dict], tool_schemas: list[dict]) -> dict:
+    """Native Chat Completions tool calls, retaining DeepSeek's reasoning fields.
+
+    Tool calls are only proposals. The bounded executor validates their arguments
+    and returns one role=tool message for each tool_call_id.
+    """
+    config = current_configuration()
+    usage = _usage.get()
+    if usage is not None:
+        usage.calls += 1
+    try:
+        response = get_client().chat.completions.create(
+            model=config.text.model, messages=messages, tools=tool_schemas,
+            tool_choice='auto', temperature=0.2)
+    except Exception as exc:
+        status = getattr(exc, 'status_code', None)
+        raise LLMError(f'原生工具调用失败：{exc}',
+                       retryable=status not in {400, 401, 403, 404, 413, 422}) from exc
+    if usage is not None and response.usage is not None:
+        usage.calls_with_usage += 1
+        usage.prompt_tokens += response.usage.prompt_tokens or 0
+        usage.completion_tokens += response.usage.completion_tokens or 0
+    if not response.choices:
+        raise LLMError('工具调度模型返回了空回答。')
+    choice = response.choices[0]
+    if choice.finish_reason in {'length', 'content_filter'}:
+        raise LLMError(f'工具调度输出未完成（{choice.finish_reason}），尚未执行任何工具。')
+    msg = choice.message
+    result = {'role': 'assistant', 'content': msg.content}
+    reasoning = getattr(msg, 'reasoning_content', None)
+    if reasoning is not None:
+        result['reasoning_content'] = reasoning
+    calls = getattr(msg, 'tool_calls', None) or []
+    if getattr(msg, 'refusal', None) or (not calls and not msg.content):
+        raise LLMError('工具调度模型未返回可用回答，尚未执行任何工具。')
+    if len(calls) > 8 or len({c.id for c in calls}) != len(calls):
+        raise LLMError('一次工具调用超过 8 个或调用 ID 重复，未执行。')
+    if calls:
+        if any(not c.id or c.type != 'function' for c in calls):
+            raise LLMError('工具调用缺少 ID 或类型不受支持，未执行。')
+        result['tool_calls'] = [
+            {'id': c.id, 'type': 'function', 'function': {'name': c.function.name, 'arguments': c.function.arguments}}
+            for c in calls]
+    return result

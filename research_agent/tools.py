@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
+from .cache_lifecycle import record_cache_file
 from .config import settings
 from .models import Paper
 
@@ -44,6 +45,8 @@ class Cache:
     def get(self, key: str, ttl: float | None = None):
         path = self._path(key)
         try:
+            if path.exists():
+                record_cache_file(path)
             if ttl is not None and time.time() - path.stat().st_mtime > ttl:
                 return None
             return json.loads(path.read_text(encoding="utf-8"))
@@ -56,10 +59,15 @@ class Cache:
         with tempfile.NamedTemporaryFile("w", dir=self.root, encoding="utf-8", delete=False) as f:
             name = f.name
             json.dump(value, f, ensure_ascii=False)
-        os.replace(name, self._path(key))
+        path = self._path(key)
+        os.replace(name, path)
+        record_cache_file(path)
 
     def binary_path(self, key: str, suffix: str = '.bin') -> Path:
-        return self._path(key).with_suffix(suffix)
+        path = self._path(key).with_suffix(suffix)
+        if path.exists():
+            record_cache_file(path)
+        return path
 
     def put_bytes(self, key: str, value: bytes, suffix: str = '.bin') -> Path:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -68,6 +76,7 @@ class Cache:
             name = f.name
         path = self.binary_path(key, suffix)
         os.replace(name, path)
+        record_cache_file(path)
         return path
 
 

@@ -93,6 +93,12 @@ class Evidence(Record):
     asset_id: str = ''
 
 
+class EvidenceAssessment(Record):
+    evidence_id: str
+    role: Literal['support', 'limitation', 'contradiction', 'background']
+    explanation: str = Field(max_length=600)
+
+
 class Claim(Record):
     id: str
     text: str
@@ -100,11 +106,17 @@ class Claim(Record):
     kind: Literal["problem", "method", "dataset", "metric", "conclusion"] = "conclusion"
     status: Literal["supported", "partial", "insufficient", "unreviewed"] = "unreviewed"
     reason: str = ""
+    focus: str = Field(default='', max_length=100)
+    priority: Literal['primary', 'detail'] = 'detail'
+    scope: str = Field(default='', max_length=500)
+    evidence_assessments: list[EvidenceAssessment] = Field(default_factory=list, max_length=8)
 
 
 class Gap(Record):
     question: str
     experiment: str
+    evidence_ids: list[str] = Field(default_factory=list, max_length=8)
+    criterion: str = Field(default='', max_length=500)
 
 
 class Usage(Record):
@@ -135,7 +147,12 @@ class RunResult(Record):
     question: str
     provider: str
     model: str
-    status: Literal["running", "complete", "partial", "failed"] = "running"
+    status: Literal["running", "complete", "partial", "failed", "paused"] = "running"
+    engine: str = 'legacy'
+    cache_root: str = ''
+    resumable: bool = False
+    pending_selection: dict = Field(default_factory=dict)
+    tool_calls: list[dict] = Field(default_factory=list)
     queries: list[str] = Field(default_factory=list)
     candidates: list[Paper] = Field(default_factory=list)
     papers: list[Paper] = Field(default_factory=list)
@@ -207,6 +224,9 @@ class AnchoredExtractionResult(AnchoredExtraction):
 
 
 class DraftClaim(Record):
+    focus: str = Field(default='', max_length=100)
+    priority: Literal['primary', 'detail'] = 'detail'
+    scope: str = Field(default='', max_length=500)
     text: str
     evidence_ids: list[str] = Field(min_length=1, max_length=8)
     kind: Literal["problem", "method", "dataset", "metric", "conclusion"]
@@ -221,6 +241,7 @@ class Verdict(Record):
     claim_id: str
     status: Literal["supported", "partial", "insufficient"]
     reason: str
+    evidence_assessments: list[EvidenceAssessment] = Field(default_factory=list, max_length=8)
 
 
 class Review(Record):

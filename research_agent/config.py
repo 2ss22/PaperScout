@@ -102,8 +102,8 @@ def current_configuration() -> Configuration:
 
 
 @contextmanager
-def configuration_scope(secrets: Mapping | None = None):
-    token = _active.set(load_configuration(secrets))
+def configuration_scope(secrets: Mapping | None = None, *, snapshot: Configuration | None = None):
+    token = _active.set(snapshot or load_configuration(secrets))
     try:
         yield
     finally:

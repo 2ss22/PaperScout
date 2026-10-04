@@ -10,7 +10,7 @@ from research_agent import agents, llm, orchestrator
 from research_agent.models import (Claim, Draft, DraftClaim, Evidence, Extraction, ExtractedFinding,
                                    Paper, Plan, Review, RunResult, Selection, Selections,
                                    TextChunk, Usage, Verdict)
-from research_agent.orchestrator import add_extraction, review_claims, run_research
+from research_agent.orchestrator import add_extraction, review_claims, run_research_legacy as run_research
 from research_agent.report import render_report
 from research_agent.tools import ToolError
 

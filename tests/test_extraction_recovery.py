@@ -6,7 +6,7 @@ import pytest
 
 from research_agent import agents, llm
 from research_agent.models import Extraction, ExtractionResult, TextChunk, Usage
-from research_agent.orchestrator import run_research, add_extraction
+from research_agent.orchestrator import run_research_legacy as run_research, add_extraction
 from tests.test_pipeline import QUOTE, sample_run, pipeline
 
 

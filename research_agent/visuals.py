@@ -41,7 +41,28 @@ def reading_chunks(asset: VisualAsset) -> list[TextChunk]:
     return result
 
 
-def read_visuals(paper: Paper, client: ArxivClient, query: str, max_pages: int | None = None) -> list[TextChunk]:
+def visual_candidates(doc, paper_id: str) -> list[TextChunk]:
+    candidates = []
+    for i, page in enumerate(doc):
+        text = page.get_text()
+        area = page.rect.get_area()
+        meaningful_image = any(pymupdf.Rect(item['bbox']).get_area() > area * 0.02 for item in page.get_image_info())
+        meaningful_drawing = any(item['rect'].get_area() > area * 0.01 for item in page.get_drawings())
+        caption = re.search(r'(?im)^\s*(?:figure|fig\.|table)\s+\d+[\s.:]', text)
+        if meaningful_image or meaningful_drawing or caption:
+            candidates.append(TextChunk(id=str(i), paper_id=paper_id, page=i + 1,
+                                        text=text or 'scanned page image table figure'))
+    return candidates
+
+
+def list_visual_pages(paper: Paper, client: ArxivClient) -> list[dict]:
+    with pymupdf.open(stream=client.pdf(paper), filetype='pdf') as doc:
+        if len(doc) > 80:
+            raise ToolError('论文超过 80 页图表读取限制。')
+        return [{'page': c.page, 'excerpt': c.text[:600]} for c in visual_candidates(doc, paper.id)]
+
+
+def read_visuals(paper: Paper, client: ArxivClient, query: str, max_pages: int | None = None, *, page_numbers: list[int] | None = None) -> list[TextChunk]:
     """Returns table/visual chunks; records selected source images on Paper."""
     budget = vision_settings.max_pages if max_pages is None else max(0, min(6, max_pages))
     if budget == 0:
@@ -56,21 +77,11 @@ def read_visuals(paper: Paper, client: ArxivClient, query: str, max_pages: int |
         with pymupdf.open(stream=data, filetype='pdf') as doc:
             if len(doc) > 80:
                 raise ToolError('论文超过 80 页图表读取限制。')
-            candidates = []
-            for i, page in enumerate(doc):
-                text = page.get_text()
-                area = page.rect.get_area()
-                images = page.get_image_info()
-                drawings = page.get_drawings()
-                meaningful_image = any(pymupdf.Rect(item['bbox']).get_area() > area * 0.02 for item in images)
-                meaningful_drawing = any(item['rect'].get_area() > area * 0.01 for item in drawings)
-                caption = re.search(r'(?im)^\s*(?:figure|fig\.|table)\s+\d+[\s.:]', text)
-                if meaningful_image or meaningful_drawing or caption:
-                    candidates.append(TextChunk(id=str(i), paper_id=paper.id, page=i + 1,
-                                                text=text or 'scanned page image table figure'))
+            candidates = visual_candidates(doc, paper.id)
             paper.visual_pages_available = len(candidates)
-            selected = retrieve(candidates, query, budget)
-            if len(candidates) > len(selected):
+            selected = retrieve(candidates, query, budget) if page_numbers is None else [
+                c for c in candidates if c.page in page_numbers][:budget]
+            if page_numbers is None and len(candidates) > len(selected):
                 paper.visual_limitations.append(f'发现 {len(candidates)} 个图表候选页，本次按相关性读取 {len(selected)} 页。')
             for candidate in selected:
                 page = doc[int(candidate.id)]
